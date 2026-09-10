@@ -1,6 +1,7 @@
 # LocaCar — Routes prévues
 
-> Document de conception — Jalon 1. Aucune de ces routes n'est encore implémentée.
+> Document de conception — Jalon 1. Toutes ces routes sont implémentées au jalon 4 ; le scénario
+> rejouable se trouve dans `Api/Api.http`, et les adresses de lancement dans `README.md`.
 
 ## 1. Routes métier (API)
 
