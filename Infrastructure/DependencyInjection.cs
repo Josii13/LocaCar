@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Infrastructure.Persistence;
+using Infrastructure.Persistence.Repositories;
 using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -22,10 +23,17 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Chaine de connexion 'DefaultConnection' absente de la configuration.");
 
+        // AddDbContext enregistre le contexte en Scoped : une instance par requete HTTP.
         services.AddDbContext<LocaCarDbContext>(options => options.UseSqlServer(chaine));
 
-        // La couche Application ne voit que l'interface, jamais la classe concrete.
-        services.AddScoped<ILocaCarDbContext>(sp => sp.GetRequiredService<LocaCarDbContext>());
+        // Repositories et UnitOfWork sont Scoped eux aussi : ils recoivent tous la meme
+        // instance de LocaCarDbContext, condition de l'atomicite de R3 et R4.
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<ICategorieVehiculeRepository, CategorieVehiculeRepository>();
+        services.AddScoped<IVehiculeRepository, VehiculeRepository>();
+        services.AddScoped<IReservationLocationRepository, ReservationLocationRepository>();
+        services.AddScoped<IContratLocationRepository, ContratLocationRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddSingleton<IHorloge, HorlogeSysteme>();
 

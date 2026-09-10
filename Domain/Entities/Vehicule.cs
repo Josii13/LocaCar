@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Domain.Common;
 using Domain.Enums;
 
@@ -10,8 +11,10 @@ namespace Domain.Entities;
 public class Vehicule : BaseEntity
 {
     /// <summary>Plaque du vehicule. Unique parmi les vehicules non supprimes.</summary>
+    [Required, MaxLength(20)]
     public string Immatriculation { get; set; } = string.Empty;
 
+    [Required, MaxLength(100)]
     public string Modele { get; set; } = string.Empty;
 
     public StatutVehicule Statut { get; set; } = StatutVehicule.Disponible;

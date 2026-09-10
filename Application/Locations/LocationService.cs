@@ -10,7 +10,7 @@ namespace Application.Locations;
 /// <inheritdoc cref="ILocationService"/>
 public class LocationService : ILocationService
 {
-    private readonly ILocaCarDbContext _contexte;
+    private readonly IUnitOfWork _uow;
     private readonly IHorloge _horloge;
 
     /// <summary>Statuts qui consomment une unite de capacite dans leur categorie (R2).</summary>
@@ -20,9 +20,9 @@ public class LocationService : ILocationService
         StatutReservationLocation.Confirmee
     ];
 
-    public LocationService(ILocaCarDbContext contexte, IHorloge horloge)
+    public LocationService(IUnitOfWork uow, IHorloge horloge)
     {
-        _contexte = contexte;
+        _uow = uow;
         _horloge = horloge;
     }
 
@@ -40,7 +40,8 @@ public class LocationService : ILocationService
 
         await GarantirCategorieExistanteAsync(categorieVehiculeId, ct);
 
-        return await VehiculesLibres(categorieVehiculeId, debut, fin)
+        return await _uow.Vehicules.Libres(categorieVehiculeId, debut, fin)
+            .OrderBy(v => v.Immatriculation)
             .Select(v => new VehiculeDisponibleDto
             {
                 Id = v.Id,
@@ -59,12 +60,7 @@ public class LocationService : ILocationService
 
     public async Task<ReservationDto> ObtenirReservationAsync(int id, CancellationToken ct = default)
     {
-        var reservation = await _contexte.ReservationsLocations
-            .Include(r => r.Client)
-            .Include(r => r.Categorie)
-            .Include(r => r.Contrat)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == id, ct)
+        var reservation = await _uow.ReservationsLocations.ObtenirAvecDetailsAsync(id, ct)
             ?? throw new RessourceIntrouvableException("Reservation", id);
 
         return VersDto(reservation);
@@ -72,10 +68,7 @@ public class LocationService : ILocationService
 
     public async Task<ContratDto> ObtenirContratAsync(int id, CancellationToken ct = default)
     {
-        var contrat = await _contexte.ContratsLocations
-            .Include(c => c.Vehicule)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == id, ct)
+        var contrat = await _uow.ContratsLocations.ObtenirAvecVehiculeAsync(id, ct)
             ?? throw new RessourceIntrouvableException("Contrat", id);
 
         return VersDto(contrat);
@@ -99,12 +92,10 @@ public class LocationService : ILocationService
             throw new DemandeInvalideException("La date de fin doit etre posterieure a la date de debut.");
         }
 
-        var client = await _contexte.Clients
-            .FirstOrDefaultAsync(c => c.Id == demande.ClientId, ct)
+        var client = await _uow.Clients.ObtenirParIdAsync(demande.ClientId, ct)
             ?? throw new RessourceIntrouvableException("Client", demande.ClientId);
 
-        var categorie = await _contexte.CategoriesVehicules
-            .FirstOrDefaultAsync(c => c.Id == demande.CategorieVehiculeId, ct)
+        var categorie = await _uow.CategoriesVehicules.ObtenirParIdAsync(demande.CategorieVehiculeId, ct)
             ?? throw new RessourceIntrouvableException("Categorie de vehicule", demande.CategorieVehiculeId);
 
         // --- R1, condition 3 : le permis doit rester valide jusqu'au retour prevu.
@@ -116,11 +107,13 @@ public class LocationService : ILocationService
         }
 
         // --- R2 : capacite de la categorie sur la periode.
-        var nbVehiculesLibres = await VehiculesLibres(demande.CategorieVehiculeId, demande.Debut, demande.Fin)
+        var nbVehiculesLibres = await _uow.Vehicules
+            .Libres(demande.CategorieVehiculeId, demande.Debut, demande.Fin)
             .CountAsync(ct);
 
-        var nbReservationsActives = await ReservationsActivesChevauchantes(
-            demande.CategorieVehiculeId, demande.Debut, demande.Fin).CountAsync(ct);
+        var nbReservationsActives = await _uow.ReservationsLocations
+            .ActivesChevauchantes(demande.CategorieVehiculeId, demande.Debut, demande.Fin, StatutsActifs)
+            .CountAsync(ct);
 
         // Une reservation active n'a pas encore de vehicule affecte : elle occupe une
         // unite de capacite. Sans ce comptage, N clients reserveraient la meme voiture.
@@ -144,8 +137,8 @@ public class LocationService : ILocationService
             MontantEstime = joursEstimes * categorie.TarifJournalier
         };
 
-        _contexte.ReservationsLocations.Add(reservation);
-        await _contexte.SaveChangesAsync(ct);
+        _uow.ReservationsLocations.Ajouter(reservation);
+        await _uow.SaveChangesAsync(ct);
 
         reservation.Client = client;
         reservation.Categorie = categorie;
@@ -158,9 +151,7 @@ public class LocationService : ILocationService
 
     public async Task<ContratDto> DemarrerLocationAsync(int reservationId, CancellationToken ct = default)
     {
-        var reservation = await _contexte.ReservationsLocations
-            .Include(r => r.Categorie)
-            .FirstOrDefaultAsync(r => r.Id == reservationId, ct)
+        var reservation = await _uow.ReservationsLocations.ObtenirAvecCategorieAsync(reservationId, ct)
             ?? throw new RessourceIntrouvableException("Reservation", reservationId);
 
         if (!StatutsActifs.Contains(reservation.Statut))
@@ -171,7 +162,8 @@ public class LocationService : ILocationService
 
         // Le vehicule n'est choisi qu'ici : on reserve une categorie, on contractualise
         // un vehicule. La disponibilite est reevaluee maintenant, pas a la reservation.
-        var vehicule = await VehiculesLibres(reservation.CategorieVehiculeId, reservation.Debut, reservation.Fin)
+        var vehicule = await _uow.Vehicules
+            .Libres(reservation.CategorieVehiculeId, reservation.Debut, reservation.Fin)
             .OrderBy(v => v.Id)
             .FirstOrDefaultAsync(ct)
             ?? throw new ConflitMetierException(
@@ -185,14 +177,14 @@ public class LocationService : ILocationService
             RetourPrevu = reservation.Fin
         };
 
-        _contexte.ContratsLocations.Add(contrat);
+        _uow.ContratsLocations.Ajouter(contrat);
         vehicule.Statut = StatutVehicule.Loue;
         reservation.Statut = StatutReservationLocation.EnCours;
 
         // Les trois effets partent dans un seul SaveChanges, donc une seule transaction :
         // soit le contrat, le statut du vehicule et celui de la reservation changent
         // ensemble, soit rien ne change.
-        await _contexte.SaveChangesAsync(ct);
+        await _uow.SaveChangesAsync(ct);
 
         contrat.Vehicule = vehicule;
         return VersDto(contrat);
@@ -205,11 +197,7 @@ public class LocationService : ILocationService
     public async Task<ContratDto> EnregistrerRetourAsync(
         int contratId, DateTime? retourReel, CancellationToken ct = default)
     {
-        var contrat = await _contexte.ContratsLocations
-            .Include(c => c.Vehicule)
-            .Include(c => c.Reservation)
-                .ThenInclude(r => r.Categorie)
-            .FirstOrDefaultAsync(c => c.Id == contratId, ct)
+        var contrat = await _uow.ContratsLocations.ObtenirPourRetourAsync(contratId, ct)
             ?? throw new RessourceIntrouvableException("Contrat", contratId);
 
         if (contrat.RetourReel is not null)
@@ -244,7 +232,7 @@ public class LocationService : ILocationService
         contrat.Reservation.Statut = StatutReservationLocation.Terminee;
 
         // La aussi, un seul SaveChanges pour les quatre effets.
-        await _contexte.SaveChangesAsync(ct);
+        await _uow.SaveChangesAsync(ct);
 
         return VersDto(contrat);
     }
@@ -253,38 +241,9 @@ public class LocationService : ILocationService
     // Briques communes
     // ------------------------------------------------------------------
 
-    /// <summary>
-    /// Vehicules d'une categorie affectables sur la periode : statut Disponible et
-    /// aucun contrat chevauchant. Definition unique de "vehicule libre", partagee par
-    /// UC1, par le comptage de R2 et par la selection de R3.
-    /// Un contrat immobilise le vehicule depuis Depart jusqu'au retour reel s'il a eu
-    /// lieu, jusqu'au retour prevu sinon.
-    /// Bornes exclusives : une location finissant a 08h00 ne chevauche pas une location
-    /// commencant a 08h00.
-    /// </summary>
-    private IQueryable<Vehicule> VehiculesLibres(int categorieVehiculeId, DateTime debut, DateTime fin) =>
-        _contexte.Vehicules
-            .Where(v => v.CategorieVehiculeId == categorieVehiculeId
-                        && v.Statut == StatutVehicule.Disponible
-                        && !v.Contrats.Any(c => c.Depart < fin
-                                                && debut < (c.RetourReel ?? c.RetourPrevu)));
-
-    /// <summary>
-    /// Reservations de la categorie qui occupent de la capacite sur la periode :
-    /// statut EnAttente ou Confirmee, et periode chevauchante.
-    /// </summary>
-    private IQueryable<ReservationLocation> ReservationsActivesChevauchantes(
-        int categorieVehiculeId, DateTime debut, DateTime fin) =>
-        _contexte.ReservationsLocations
-            .Where(r => r.CategorieVehiculeId == categorieVehiculeId
-                        && StatutsActifs.Contains(r.Statut)
-                        && r.Debut < fin
-                        && debut < r.Fin);
-
     private async Task GarantirCategorieExistanteAsync(int categorieVehiculeId, CancellationToken ct)
     {
-        var existe = await _contexte.CategoriesVehicules
-            .AnyAsync(c => c.Id == categorieVehiculeId, ct);
+        var existe = await _uow.CategoriesVehicules.ExisteAsync(c => c.Id == categorieVehiculeId, ct);
 
         if (!existe)
         {

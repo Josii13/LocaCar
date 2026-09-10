@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Domain.Common;
 
 namespace Domain.Entities;
@@ -10,20 +11,25 @@ namespace Domain.Entities;
 public class CategorieVehicule : BaseEntity
 {
     /// <summary>Identifiant metier de la categorie. Unique parmi les categories non supprimees.</summary>
+    [Required, MaxLength(10)]
     public string Code { get; set; } = string.Empty;
 
+    [Required, MaxLength(100)]
     public string Libelle { get; set; } = string.Empty;
 
     /// <summary>Prix d'une journee entamee. Base des calculs de la regle R4.</summary>
+    [Range(0, double.MaxValue)]
     public decimal TarifJournalier { get; set; }
 
     /// <summary>
     /// Montant de la caution. Decision D4 : stockee et affichee uniquement,
     /// elle n'entre dans aucun calcul de montant.
     /// </summary>
+    [Range(0, double.MaxValue)]
     public decimal Caution { get; set; }
 
     /// <summary>Penalite appliquee par jour de retard entame (regle R4).</summary>
+    [Range(0, double.MaxValue)]
     public decimal PenaliteRetardParJour { get; set; }
 
     /// <summary>Vehicules appartenant a cette categorie.</summary>

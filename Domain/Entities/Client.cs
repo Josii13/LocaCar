@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Domain.Common;
 
 namespace Domain.Entities;
@@ -9,12 +10,16 @@ namespace Domain.Entities;
 public class Client : BaseEntity
 {
     /// <summary>Identifiant metier du client. Unique parmi les clients non supprimes.</summary>
+    [Required, MaxLength(20)]
     public string Numero { get; set; } = string.Empty;
 
+    [Required, MaxLength(100)]
     public string Nom { get; set; } = string.Empty;
 
+    [Required, MaxLength(20)]
     public string Telephone { get; set; } = string.Empty;
 
+    [Required, MaxLength(30)]
     public string NumeroPermis { get; set; } = string.Empty;
 
     /// <summary>

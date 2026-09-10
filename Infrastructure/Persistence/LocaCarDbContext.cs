@@ -1,4 +1,3 @@
-using Application.Common.Interfaces;
 using Domain.Common;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -7,11 +6,11 @@ namespace Infrastructure.Persistence;
 
 /// <summary>
 /// Contexte EF Core de LocaCar.
-/// Aucune contrainte n'est declaree par attribut sur les entites : toute la
-/// configuration relationnelle vit dans les classes de Persistence/Configurations,
-/// ce qui laisse le projet Domain sans dependance a EF Core.
+/// Les entites ne portent que des attributs de validation simples (Required, MaxLength) ;
+/// toute la configuration relationnelle (types SQL, index, FK, filtre global) vit dans
+/// les classes de Persistence/Configurations, ce qui laisse Domain sans dependance a EF Core.
 /// </summary>
-public class LocaCarDbContext : DbContext, ILocaCarDbContext
+public class LocaCarDbContext : DbContext
 {
     public LocaCarDbContext(DbContextOptions<LocaCarDbContext> options)
         : base(options)

@@ -11,7 +11,7 @@ namespace Application.Referentiel;
 /// <inheritdoc cref="ICategorieVehiculeService"/>
 public class CategorieVehiculeService : ICategorieVehiculeService
 {
-    private readonly ILocaCarDbContext _contexte;
+    private readonly IUnitOfWork _uow;
 
     /// <summary>
     /// Statuts pour lesquels une reservation empeche encore de retirer la categorie
@@ -25,19 +25,19 @@ public class CategorieVehiculeService : ICategorieVehiculeService
         StatutReservationLocation.EnCours
     ];
 
-    public CategorieVehiculeService(ILocaCarDbContext contexte)
+    public CategorieVehiculeService(IUnitOfWork uow)
     {
-        _contexte = contexte;
+        _uow = uow;
     }
 
     public async Task<IReadOnlyList<CategorieVehiculeDto>> ObtenirToutesAsync(CancellationToken ct = default) =>
-        await _contexte.CategoriesVehicules
+        await _uow.CategoriesVehicules.Requete()
             .OrderBy(c => c.Code)
             .Select(Projection)
             .ToListAsync(ct);
 
     public async Task<CategorieVehiculeDto> ObtenirAsync(int id, CancellationToken ct = default) =>
-        await _contexte.CategoriesVehicules
+        await _uow.CategoriesVehicules.Requete()
             .Where(c => c.Id == id)
             .Select(Projection)
             .FirstOrDefaultAsync(ct)
@@ -58,8 +58,8 @@ public class CategorieVehiculeService : ICategorieVehiculeService
             PenaliteRetardParJour = demande.PenaliteRetardParJour
         };
 
-        _contexte.CategoriesVehicules.Add(categorie);
-        await _contexte.SaveChangesAsync(ct);
+        _uow.CategoriesVehicules.Ajouter(categorie);
+        await _uow.SaveChangesAsync(ct);
 
         return VersDto(categorie);
     }
@@ -67,8 +67,7 @@ public class CategorieVehiculeService : ICategorieVehiculeService
     public async Task ModifierAsync(
         int id, EnregistrerCategorieVehiculeDto demande, CancellationToken ct = default)
     {
-        var categorie = await _contexte.CategoriesVehicules
-            .FirstOrDefaultAsync(c => c.Id == id, ct)
+        var categorie = await _uow.CategoriesVehicules.ObtenirParIdAsync(id, ct)
             ?? throw new RessourceIntrouvableException("Categorie de vehicule", id);
 
         var code = Normaliser(demande.Code);
@@ -82,20 +81,19 @@ public class CategorieVehiculeService : ICategorieVehiculeService
 
         // Modifier un tarif ne retarife pas les contrats deja clos : leur MontantFinal
         // est fige au retour. Seules les locations futures sont concernees.
-        await _contexte.SaveChangesAsync(ct);
+        await _uow.SaveChangesAsync(ct);
     }
 
     public async Task SupprimerAsync(int id, CancellationToken ct = default)
     {
-        var categorie = await _contexte.CategoriesVehicules
-            .FirstOrDefaultAsync(c => c.Id == id, ct)
+        var categorie = await _uow.CategoriesVehicules.ObtenirParIdAsync(id, ct)
             ?? throw new RessourceIntrouvableException("Categorie de vehicule", id);
 
-        var nbVehicules = await _contexte.Vehicules
-            .CountAsync(v => v.CategorieVehiculeId == id, ct);
+        var nbVehicules = await _uow.Vehicules
+            .CompterAsync(v => v.CategorieVehiculeId == id, ct);
 
-        var nbReservations = await _contexte.ReservationsLocations
-            .CountAsync(r => r.CategorieVehiculeId == id && StatutsBloquants.Contains(r.Statut), ct);
+        var nbReservations = await _uow.ReservationsLocations
+            .CompterAsync(r => r.CategorieVehiculeId == id && StatutsBloquants.Contains(r.Statut), ct);
 
         // C'est le pendant applicatif du Restrict pose sur les cles etrangeres :
         // on refuse explicitement plutot que de laisser la base lever une erreur brute.
@@ -107,9 +105,9 @@ public class CategorieVehiculeService : ICategorieVehiculeService
                 + "et ne peut pas etre supprimee.");
         }
 
-        // Remove() est converti en suppression logique par LocaCarDbContext.
-        _contexte.CategoriesVehicules.Remove(categorie);
-        await _contexte.SaveChangesAsync(ct);
+        // Supprimer() est converti en suppression logique par LocaCarDbContext.
+        _uow.CategoriesVehicules.Supprimer(categorie);
+        await _uow.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -119,10 +117,7 @@ public class CategorieVehiculeService : ICategorieVehiculeService
     /// </summary>
     private async Task GarantirCodeDisponibleAsync(string code, int? idAExclure, CancellationToken ct)
     {
-        var dejaPris = await _contexte.CategoriesVehicules
-            .AnyAsync(c => c.Code == code && (idAExclure == null || c.Id != idAExclure), ct);
-
-        if (dejaPris)
+        if (await _uow.CategoriesVehicules.CodeDejaUtiliseAsync(code, idAExclure, ct))
         {
             throw new ConflitMetierException($"Le code {code} est deja utilise par une autre categorie.");
         }
