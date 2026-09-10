@@ -1,6 +1,7 @@
 using Api.Middleware;
 using Application;
 using Infrastructure;
+using Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,10 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+
+    // Migrations appliquees et jeu de demonstration insere si la base est vide
+    // (voir Infrastructure/Persistence/DonneesDemonstration.cs).
+    await app.Services.InitialiserBaseDeDemonstrationAsync();
 }
 
 // Doit preceder tout le reste du pipeline pour intercepter les exceptions

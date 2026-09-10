@@ -1,6 +1,422 @@
-@Api_HostAddress = http://localhost:5124
+### =====================================================================
+### LocaCar — scenario de demonstration reproductible
+###
+### Prerequis : base fraiche. Depuis la racine de la solution :
+###   dotnet ef database drop --force --project .\Infrastructure\Infrastructure.csproj --startup-project .\Api\Api.csproj
+###   dotnet run --project .\Api\Api.csproj --launch-profile http
+### Au demarrage en Development, l'API applique les migrations et insere le jeu
+### de demonstration (Infrastructure/Persistence/DonneesDemonstration.cs) :
+###   Categories : 1 = ECO (2 vehicules libres + 1 en maintenance), 2 = SUV (1 vehicule), 3 = LUX (aucun vehicule)
+###   Clients    : 1 = Kouassi Aya (permis valide jusqu'en 2029), 2 = Traore Moussa (permis expire le 30/09/2026)
+###
+### Adresse relevee dans Api/Properties/launchSettings.json (profil http).
+### Les dates ci-dessous doivent rester dans le futur : les ajuster si necessaire.
+### Executer les requetes dans l'ordre ; plusieurs reutilisent l'id de la reponse precedente.
+### =====================================================================
 
-GET {{Api_HostAddress}}/weatherforecast/
+@Api_HostAddress = http://localhost:5124
+@debut = 2026-11-02T08:00:00
+@fin = 2026-11-05T08:00:00
+@retourReel = 2026-11-07T10:00:00
+
+
+### ---------------------------------------------------------------------
+### A. Referentiel CategorieVehicule — CRUD
+### ---------------------------------------------------------------------
+
+### A1. Liste des categories
+### Attendu : 200, tableau de 3 categories (ECO, LUX, SUV)
+GET {{Api_HostAddress}}/api/categories-vehicules
 Accept: application/json
 
-###
+### A2. Lecture d'une categorie existante
+### Attendu : 200, categorie ECO avec nombreVehicules = 3
+GET {{Api_HostAddress}}/api/categories-vehicules/1
+Accept: application/json
+
+### A3. Lecture d'un identifiant inexistant
+### Attendu : 404, ProblemDetails "Categorie de vehicule 999 introuvable."
+GET {{Api_HostAddress}}/api/categories-vehicules/999
+Accept: application/json
+
+### A4. Creation valide  [verification 1 du sujet]
+### Attendu : 201, en-tete Location: /api/categories-vehicules/{id}, code normalise en majuscules "UTIL"
+# @name creerCategorie
+POST {{Api_HostAddress}}/api/categories-vehicules
+Content-Type: application/json
+
+{
+  "code": "util",
+  "libelle": "Utilitaire",
+  "tarifJournalier": 45000,
+  "caution": 200000,
+  "penaliteRetardParJour": 15000
+}
+
+### A5. Lecture de la categorie tout juste creee (cible de l'en-tete Location)
+### Attendu : 200
+GET {{Api_HostAddress}}/api/categories-vehicules/{{creerCategorie.response.body.$.id}}
+Accept: application/json
+
+### A6. Creation invalide — validation de forme  [verification 2 du sujet]
+### Attendu : 400, ValidationProblemDetails avec les messages en francais
+###           (code obligatoire, libelle obligatoire, tarif strictement positif)
+POST {{Api_HostAddress}}/api/categories-vehicules
+Content-Type: application/json
+
+{
+  "code": "",
+  "libelle": "",
+  "tarifJournalier": 0,
+  "caution": -1,
+  "penaliteRetardParJour": 0
+}
+
+### A7. Creation avec un code deja utilise — unicite  [verification 4 du sujet]
+### Attendu : 409, "Le code ECO est deja utilise par une autre categorie."
+POST {{Api_HostAddress}}/api/categories-vehicules
+Content-Type: application/json
+
+{
+  "code": "eco",
+  "libelle": "Doublon",
+  "tarifJournalier": 1000,
+  "caution": 0,
+  "penaliteRetardParJour": 0
+}
+
+### A8. Modification valide
+### Attendu : 204, sans corps
+PUT {{Api_HostAddress}}/api/categories-vehicules/{{creerCategorie.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "code": "UTIL",
+  "libelle": "Utilitaire et camionnette",
+  "tarifJournalier": 48000,
+  "caution": 200000,
+  "penaliteRetardParJour": 15000
+}
+
+### A9. Modification vers un code deja pris
+### Attendu : 409
+PUT {{Api_HostAddress}}/api/categories-vehicules/{{creerCategorie.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "code": "SUV",
+  "libelle": "Tentative de doublon",
+  "tarifJournalier": 48000,
+  "caution": 200000,
+  "penaliteRetardParJour": 15000
+}
+
+### A10. Modification d'un identifiant inexistant  [verification 3 du sujet]
+### Attendu : 404
+PUT {{Api_HostAddress}}/api/categories-vehicules/999
+Content-Type: application/json
+
+{
+  "code": "XXX",
+  "libelle": "Inexistante",
+  "tarifJournalier": 1000,
+  "caution": 0,
+  "penaliteRetardParJour": 0
+}
+
+### A11. Suppression refusee — la categorie ECO est encore utilisee par des vehicules
+### Attendu : 409, "La categorie ECO est encore utilisee (3 vehicule(s), 0 reservation(s) en cours)..."
+DELETE {{Api_HostAddress}}/api/categories-vehicules/1
+
+### A12. Suppression logique de la categorie creee en A4  [verification 7 du sujet, partie 1]
+### Attendu : 204
+DELETE {{Api_HostAddress}}/api/categories-vehicules/{{creerCategorie.response.body.$.id}}
+
+### A13. Lecture apres suppression logique  [verification 7 du sujet, partie 2]
+### Attendu : 404 — la ligne existe toujours en base (IsDeleted = 1, DeletedAt renseigne)
+###           mais le filtre global la masque. La liste A1 ne la contient plus non plus.
+GET {{Api_HostAddress}}/api/categories-vehicules/{{creerCategorie.response.body.$.id}}
+Accept: application/json
+
+### A14. Reutilisation du code libere par la suppression logique
+### Attendu : 201 — l'index unique est filtre sur IsDeleted = 0, l'ancien code est reutilisable
+# @name recreerCategorie
+POST {{Api_HostAddress}}/api/categories-vehicules
+Content-Type: application/json
+
+{
+  "code": "UTIL",
+  "libelle": "Utilitaire (recree)",
+  "tarifJournalier": 45000,
+  "caution": 200000,
+  "penaliteRetardParJour": 15000
+}
+
+### A15. Suppression d'un identifiant inexistant
+### Attendu : 404
+DELETE {{Api_HostAddress}}/api/categories-vehicules/999
+
+
+### ---------------------------------------------------------------------
+### B. Workflow metier — vehicules disponibles (UC1)
+### ---------------------------------------------------------------------
+
+### B1. Vehicules ECO disponibles sur la periode
+### Attendu : 200, 2 vehicules (AA-123-BB et AA-456-CC). AA-789-DD est en maintenance : exclu.
+GET {{Api_HostAddress}}/api/vehicules/disponibles?categorieId=1&debut={{debut}}&fin={{fin}}
+Accept: application/json
+
+### B2. Periode incoherente (fin avant debut)
+### Attendu : 400, "La date de fin doit etre posterieure a la date de debut."
+GET {{Api_HostAddress}}/api/vehicules/disponibles?categorieId=1&debut={{fin}}&fin={{debut}}
+Accept: application/json
+
+### B3. Categorie inconnue
+### Attendu : 404
+GET {{Api_HostAddress}}/api/vehicules/disponibles?categorieId=999&debut={{debut}}&fin={{fin}}
+Accept: application/json
+
+
+### ---------------------------------------------------------------------
+### C. Workflow metier — reservation (UC2 : R1, R2, R4.1)
+### ---------------------------------------------------------------------
+
+### C1. Reservation valide sur ECO  [verification 5 du sujet, etape 1]
+### Attendu : 201, Location: /api/reservations-locations/{id}, statut "EnAttente",
+###           montantEstime = Ceiling(3 jours) x 25 000 = 75 000
+# @name reservationEco
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 1,
+  "debut": "{{debut}}",
+  "fin": "{{fin}}"
+}
+
+### C2. Lecture de la reservation creee
+### Attendu : 200, contratId null (pas encore demarree)
+GET {{Api_HostAddress}}/api/reservations-locations/{{reservationEco.response.body.$.id}}
+Accept: application/json
+
+### C3. R1 violee — periode dans le passe
+### Attendu : 400, "La periode de location doit etre future."
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 1,
+  "debut": "2026-01-10T08:00:00",
+  "fin": "2026-01-12T08:00:00"
+}
+
+### C4. R1 violee — fin anterieure au debut
+### Attendu : 400, "La date de fin doit etre posterieure a la date de debut."
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 1,
+  "debut": "{{fin}}",
+  "fin": "{{debut}}"
+}
+
+### C5. R1 violee — permis du client 2 expire le 30/09/2026, avant le retour prevu
+### Attendu : 400, "Le permis du client expire le 30/09/2026, avant la fin de la location..."
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 2,
+  "categorieVehiculeId": 1,
+  "debut": "{{debut}}",
+  "fin": "{{fin}}"
+}
+
+### C6. Client inexistant
+### Attendu : 404
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 999,
+  "categorieVehiculeId": 1,
+  "debut": "{{debut}}",
+  "fin": "{{fin}}"
+}
+
+### C7. Corps incomplet — validation de forme
+### Attendu : 400, ValidationProblemDetails (client, categorie et dates obligatoires)
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+}
+
+### C8. R2 — premiere reservation SUV : 1 vehicule libre > 0 reservation active
+### Attendu : 201
+# @name reservationSuv
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 2,
+  "debut": "{{debut}}",
+  "fin": "{{fin}}"
+}
+
+### C9. R2 violee — seconde reservation SUV chevauchante : 1 vehicule libre > 1 reservation active est faux  [verification 6 du sujet]
+### Attendu : 409, "Plus de capacite sur la categorie SUV pour cette periode (1 vehicule(s) libre(s) pour 1 reservation(s) active(s))."
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 2,
+  "debut": "2026-11-04T08:00:00",
+  "fin": "2026-11-06T08:00:00"
+}
+
+### C10. Bornes exclusives — une reservation SUV qui commence exactement a la fin de C8 ne chevauche pas
+### Attendu : 201
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 2,
+  "debut": "{{fin}}",
+  "fin": "2026-11-08T08:00:00"
+}
+
+
+### ---------------------------------------------------------------------
+### D. Workflow metier — demarrage (UC3 : R3, une seule unite de travail)
+### ---------------------------------------------------------------------
+
+### D1. Demarrage de la reservation ECO  [verification 5 du sujet, etape 2]
+### Attendu : 201, Location: /api/contrats/{id}, vehicule AA-123-BB affecte, retourReel null.
+###           En base, dans la meme transaction : contrat cree, vehicule 1 -> Loue, reservation -> EnCours.
+# @name contratEco
+POST {{Api_HostAddress}}/api/reservations-locations/{{reservationEco.response.body.$.id}}/demarrer
+
+### D2. Lecture du contrat cree
+### Attendu : 200, montantFinal null
+GET {{Api_HostAddress}}/api/contrats/{{contratEco.response.body.$.id}}
+Accept: application/json
+
+### D3. La reservation est passee EnCours et pointe vers le contrat
+### Attendu : 200, statut "EnCours", contratId renseigne
+GET {{Api_HostAddress}}/api/reservations-locations/{{reservationEco.response.body.$.id}}
+Accept: application/json
+
+### D4. Second demarrage de la meme reservation — transition interdite  [verification 6 du sujet]
+### Attendu : 409, "Une reservation au statut EnCours ne peut pas etre demarree."
+POST {{Api_HostAddress}}/api/reservations-locations/{{reservationEco.response.body.$.id}}/demarrer
+
+### D5. Demarrage d'une reservation inexistante
+### Attendu : 404
+POST {{Api_HostAddress}}/api/reservations-locations/999/demarrer
+
+### D6. Le vehicule loue n'est plus disponible sur la periode
+### Attendu : 200, 1 seul vehicule (AA-456-CC)
+GET {{Api_HostAddress}}/api/vehicules/disponibles?categorieId=1&debut={{debut}}&fin={{fin}}
+Accept: application/json
+
+
+### ---------------------------------------------------------------------
+### E. Workflow metier — retour (UC4 : R4.2, une seule unite de travail)
+### ---------------------------------------------------------------------
+
+### E1. Retour anterieur au depart
+### Attendu : 400, "La date de retour ne peut pas etre anterieure a la date de depart."
+POST {{Api_HostAddress}}/api/contrats/{{contratEco.response.body.$.id}}/retour
+Content-Type: application/json
+
+{
+  "retourReel": "2020-01-01T08:00:00"
+}
+
+### E2. Retour d'un contrat inexistant
+### Attendu : 404
+POST {{Api_HostAddress}}/api/contrats/999/retour
+Content-Type: application/json
+
+{
+}
+
+### E3. Retour en retard  [verification 5 du sujet, etape 3]
+### Attendu : 200, montantFinal calcule :
+###   joursFactures = Ceiling(retourReel - depart)      -> le depart est l'instant de D1, donc
+###                                                       joursFactures = nombre de jours entames entre D1 et le 07/11 10h00
+###   joursRetard   = Ceiling(07/11 10h00 - 05/11 08h00) = Ceiling(2,083) = 3
+###   montantFinal  = joursFactures x 25 000 + 3 x 10 000
+###   La reponse renvoie joursFactures et joursRetard pour verifier le calcul a la main.
+###   En base, dans la meme transaction : vehicule 1 -> Disponible, reservation -> Terminee.
+POST {{Api_HostAddress}}/api/contrats/{{contratEco.response.body.$.id}}/retour
+Content-Type: application/json
+
+{
+  "retourReel": "{{retourReel}}"
+}
+
+### E4. Second retour du meme contrat
+### Attendu : 409, "Le retour de ce contrat a deja ete enregistre le ..."
+POST {{Api_HostAddress}}/api/contrats/{{contratEco.response.body.$.id}}/retour
+Content-Type: application/json
+
+{
+}
+
+### E5. La reservation est Terminee
+### Attendu : 200, statut "Terminee"
+GET {{Api_HostAddress}}/api/reservations-locations/{{reservationEco.response.body.$.id}}
+Accept: application/json
+
+### E6. Le vehicule est de nouveau disponible
+### Attendu : 200, 2 vehicules (AA-123-BB et AA-456-CC)
+GET {{Api_HostAddress}}/api/vehicules/disponibles?categorieId=1&debut={{debut}}&fin={{fin}}
+Accept: application/json
+
+
+### ---------------------------------------------------------------------
+### F. Exemple chiffre de reference du sujet (docs/Regles-metier.md, section 6.2)
+### ---------------------------------------------------------------------
+
+### F1. Reservation ECO du 10/12 08h00 au 12/12 08h00
+### Attendu : 201, montantEstime = 2 x 25 000 = 50 000
+# @name reservationRef
+POST {{Api_HostAddress}}/api/reservations-locations
+Content-Type: application/json
+
+{
+  "clientId": 1,
+  "categorieVehiculeId": 1,
+  "debut": "2026-12-10T08:00:00",
+  "fin": "2026-12-12T08:00:00"
+}
+
+### F2. Demarrage
+### Attendu : 201
+# @name contratRef
+POST {{Api_HostAddress}}/api/reservations-locations/{{reservationRef.response.body.$.id}}/demarrer
+
+### F3. Retour le 13/12 10h00, soit 1 jour et 2 heures apres le retour prevu
+### Attendu : 200, joursRetard = Ceiling(1,083) = 2 -> penalite 2 x 10 000 = 20 000 ;
+###           joursFactures depend de l'instant du demarrage F2 (Ceiling depuis "maintenant").
+###           Si le depart avait eu lieu le 10/12 08h00 : joursFactures = 4, montantFinal = 120 000.
+POST {{Api_HostAddress}}/api/contrats/{{contratRef.response.body.$.id}}/retour
+Content-Type: application/json
+
+{
+  "retourReel": "2026-12-13T10:00:00"
+}
+
+### F4. Contrat clos
+### Attendu : 200, retourReel et montantFinal renseignes
+GET {{Api_HostAddress}}/api/contrats/{{contratRef.response.body.$.id}}
+Accept: application/json
