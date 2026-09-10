@@ -1,8 +1,34 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@{
+    ViewData["Title"] = "Accueil";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="py-4">
+    <h1 class="display-5">LocaCar</h1>
+    <p class="lead">Gestion de location de véhicules : réservation par catégorie, démarrage de la location et calcul du montant au retour.</p>
+
+    <div class="row g-3 mt-3">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Référentiel</h5>
+                    <p class="card-text">Catégories de véhicules : code, libellé, tarif journalier, caution et pénalité de retard.</p>
+                    <a class="btn btn-primary" asp-controller="CategoriesVehicules" asp-action="Index">Gérer les catégories</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Workflow de location (API)</h5>
+                    <p class="card-text">Les opérations métier sont exposées par le projet <code>Api</code> et rejouables avec le fichier <code>Api/Api.http</code>.</p>
+                    <ul class="small mb-0">
+                        <li><code>GET /api/vehicules/disponibles</code></li>
+                        <li><code>POST /api/reservations-locations</code></li>
+                        <li><code>POST /api/reservations-locations/{id}/demarrer</code></li>
+                        <li><code>POST /api/contrats/{id}/retour</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

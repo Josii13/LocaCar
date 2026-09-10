@@ -1,0 +1,33 @@
+@model CategorieVehiculeDto
+@{
+    ViewData["Title"] = $"Supprimer {Model.Code}";
+}
+
+<h1 class="h2">Supprimer la catégorie @Model.Code</h1>
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger mt-3" role="alert"></div>
+
+<div class="alert alert-warning mt-3">
+    <strong>Suppression logique.</strong> La catégorie sera marquée comme supprimée et disparaîtra
+    des listes, mais la ligne est conservée en base. La suppression est refusée si des véhicules
+    ou des réservations en cours utilisent encore cette catégorie.
+</div>
+
+<dl class="row">
+    <dt class="col-sm-3">Code</dt>
+    <dd class="col-sm-9">@Model.Code</dd>
+
+    <dt class="col-sm-3">Libellé</dt>
+    <dd class="col-sm-9">@Model.Libelle</dd>
+
+    <dt class="col-sm-3">Tarif journalier</dt>
+    <dd class="col-sm-9">@Model.TarifJournalier.ToString("N0") F CFA</dd>
+
+    <dt class="col-sm-3">Véhicules rattachés</dt>
+    <dd class="col-sm-9">@Model.NombreVehicules</dd>
+</dl>
+
+<form asp-action="Delete" asp-route-id="@Model.Id" method="post">
+    <button type="submit" class="btn btn-danger">Confirmer la suppression</button>
+    <a class="btn btn-link" asp-action="Index">Annuler</a>
+</form>

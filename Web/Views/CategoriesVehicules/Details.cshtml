@@ -1,0 +1,32 @@
+@model CategorieVehiculeDto
+@{
+    ViewData["Title"] = $"Catégorie {Model.Code}";
+}
+
+<h1 class="h2">Catégorie @Model.Code</h1>
+
+<dl class="row mt-4">
+    <dt class="col-sm-3">Code</dt>
+    <dd class="col-sm-9">@Model.Code</dd>
+
+    <dt class="col-sm-3">Libellé</dt>
+    <dd class="col-sm-9">@Model.Libelle</dd>
+
+    <dt class="col-sm-3">Tarif journalier</dt>
+    <dd class="col-sm-9">@Model.TarifJournalier.ToString("N0") F CFA</dd>
+
+    <dt class="col-sm-3">Caution</dt>
+    <dd class="col-sm-9">@Model.Caution.ToString("N0") F CFA</dd>
+
+    <dt class="col-sm-3">Pénalité par jour de retard</dt>
+    <dd class="col-sm-9">@Model.PenaliteRetardParJour.ToString("N0") F CFA</dd>
+
+    <dt class="col-sm-3">Véhicules rattachés</dt>
+    <dd class="col-sm-9">@Model.NombreVehicules</dd>
+</dl>
+
+<div class="mt-3">
+    <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Id">Modifier</a>
+    <a class="btn btn-outline-danger" asp-action="Delete" asp-route-id="@Model.Id">Supprimer</a>
+    <a class="btn btn-link" asp-action="Index">Retour à la liste</a>
+</div>

@@ -1,0 +1,17 @@
+@model EnregistrerCategorieVehiculeDto
+@{
+    ViewData["Title"] = "Nouvelle catégorie";
+}
+
+<h1 class="h2">Nouvelle catégorie de véhicule</h1>
+
+<form asp-action="Create" method="post" class="mt-4" novalidate>
+    <partial name="_Formulaire" model="Model" />
+
+    <button type="submit" class="btn btn-primary">Créer</button>
+    <a class="btn btn-link" asp-action="Index">Annuler</a>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

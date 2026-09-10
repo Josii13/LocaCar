@@ -1,0 +1,36 @@
+@model EnregistrerCategorieVehiculeDto
+
+@* Champs communs aux ecrans de creation et de modification. Les messages de validation
+   proviennent des attributs du DTO (couche Application) et sont en francais. *@
+
+<div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+<div class="mb-3">
+    <label asp-for="Code" class="form-label">Code</label>
+    <input asp-for="Code" class="form-control" maxlength="10" placeholder="ECO" />
+    <span asp-validation-for="Code" class="text-danger"></span>
+</div>
+
+<div class="mb-3">
+    <label asp-for="Libelle" class="form-label">Libellé</label>
+    <input asp-for="Libelle" class="form-control" maxlength="100" placeholder="Économique" />
+    <span asp-validation-for="Libelle" class="text-danger"></span>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <label asp-for="TarifJournalier" class="form-label">Tarif journalier (F CFA)</label>
+        <input asp-for="TarifJournalier" class="form-control" type="text" inputmode="decimal" />
+        <span asp-validation-for="TarifJournalier" class="text-danger"></span>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label asp-for="Caution" class="form-label">Caution (F CFA)</label>
+        <input asp-for="Caution" class="form-control" type="text" inputmode="decimal" />
+        <span asp-validation-for="Caution" class="text-danger"></span>
+    </div>
+    <div class="col-md-4 mb-3">
+        <label asp-for="PenaliteRetardParJour" class="form-label">Pénalité par jour de retard (F CFA)</label>
+        <input asp-for="PenaliteRetardParJour" class="form-control" type="text" inputmode="decimal" />
+        <span asp-validation-for="PenaliteRetardParJour" class="text-danger"></span>
+    </div>
+</div>

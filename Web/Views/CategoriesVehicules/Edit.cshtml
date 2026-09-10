@@ -1,0 +1,18 @@
+@model CategorieVehiculeEditionViewModel
+@{
+    ViewData["Title"] = $"Modifier {Model.Code}";
+}
+
+<h1 class="h2">Modifier la catégorie @Model.Code</h1>
+
+<form asp-action="Edit" asp-route-id="@Model.Id" method="post" class="mt-4" novalidate>
+    <input type="hidden" asp-for="Id" />
+    <partial name="_Formulaire" model="Model" />
+
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a class="btn btn-link" asp-action="Details" asp-route-id="@Model.Id">Annuler</a>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
