@@ -183,6 +183,7 @@ La réponse de `POST /api/contrats/{id}/retour` renvoie `joursFactures` et `jour
 
 ## 9. Autres documents
 
+- `docs/Cahier-des-charges.md` — sujet complet du fil rouge (fiche 5.4 : LocaCar)
 - `docs/Modele.md`, `docs/modele-diagramme.md` — modèle et diagramme des entités
 - `docs/Regles-metier.md` — enums, règles R1 à R4, codes HTTP
 - `docs/Routes.md` — routes prévues au jalon 1
